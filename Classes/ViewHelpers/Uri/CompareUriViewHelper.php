@@ -28,10 +28,12 @@ namespace In2code\In2publishCore\ViewHelpers\Uri;
  */
 
 use In2code\In2publishCore\Domain\Service\DomainService;
+use In2code\In2publishCore\Service\Uri\UriService;
 use TYPO3\CMS\Core\Utility\GeneralUtility;
 use TYPO3\CMS\Frontend\Page\CacheHashCalculator;
 use TYPO3Fluid\Fluid\Core\ViewHelper\AbstractTagBasedViewHelper;
 use function http_build_query;
+use function rtrim;
 
 /**
  * Class CompareUriViewHelper
@@ -49,11 +51,17 @@ class CompareUriViewHelper extends AbstractTagBasedViewHelper
     protected $domainService;
 
     /**
+     * @var UriService
+     */
+    protected $uriService;
+
+    /**
      * CompareUriViewHelper constructor.
      */
     public function __construct()
     {
         $this->domainService = GeneralUtility::makeInstance(DomainService::class);
+        $this->uriService = GeneralUtility::makeInstance(UriService::class);
         parent::__construct();
     }
 
@@ -74,8 +82,7 @@ class CompareUriViewHelper extends AbstractTagBasedViewHelper
     {
         $identifier = $this->arguments['identifier'];
 
-        $domain = '//' . $this->domainService->getDomainFromPageIdentifier($identifier, 'local');
-        $script = '/index.php?';
+        $domain = rtrim($this->uriService->getDomain($identifier, 'pages', UriService::LOCAL), '/');
 
         $query = [
             'id' => $identifier,
@@ -90,7 +97,7 @@ class CompareUriViewHelper extends AbstractTagBasedViewHelper
 
         $params = http_build_query($query, '', '&');
 
-        $url = $domain . $script . $params;
+        $url = $domain . '?' . $params;
 
         $this->tag->setContent($this->renderChildren());
         $this->tag->addAttribute('href', $url);

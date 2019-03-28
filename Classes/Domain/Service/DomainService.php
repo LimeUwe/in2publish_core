@@ -31,6 +31,7 @@ namespace In2code\In2publishCore\Domain\Service;
 use In2code\In2publishCore\Config\ConfigContainer;
 use In2code\In2publishCore\Domain\Model\RecordInterface;
 use In2code\In2publishCore\In2publishCoreException;
+use In2code\In2publishCore\Service\Configuration\TcaService;
 use In2code\In2publishCore\Utility\DatabaseUtility;
 use PDO;
 use TYPO3\CMS\Backend\Utility\BackendUtility;
@@ -59,9 +60,15 @@ class DomainService
      * @param RecordInterface $record
      * @param string $stagingLevel "local" or "foreign"
      * @param bool $addProtocol
+     *
      * @return string
      */
     private $configContainer;
+
+    /**
+     * @var TcaService
+     */
+    private $tcaService = null;
 
     /**
      * DomainService constructor.
@@ -69,12 +76,14 @@ class DomainService
     public function __construct()
     {
         $this->configContainer = GeneralUtility::makeInstance(ConfigContainer::class);
+        $this->tcaService = GeneralUtility::makeInstance(TcaService::class);
     }
 
     /**
      * @param RecordInterface $record
      * @param string $stagingLevel
      * @param bool $addProtocol
+     *
      * @return mixed|string
      */
     public function getFirstDomain(RecordInterface $record, $stagingLevel = self::LEVEL_LOCAL, $addProtocol = true)
@@ -110,6 +119,7 @@ class DomainService
      * @param int $pageIdentifier
      * @param string $stagingLevel
      * @param bool $addProtocol
+     *
      * @return string
      * @throws In2publishCoreException
      */
@@ -119,6 +129,13 @@ class DomainService
         bool $addProtocol
     ): string {
         if (version_compare(TYPO3_branch, '9.3', '>=')) {
+            $query = DatabaseUtility::buildDatabaseConnectionForSide($stagingLevel)->createQueryBuilder();
+            $page = $query->select('*')->from('pages')->where('uid=' . $pageIdentifier)->execute()->fetch();
+            $sysLanguage = $page[$this->tcaService->getLanguageField('pages')];
+            $origPage = $page[$this->tcaService->getTransOrigPointerField('pages')] ?? null;
+            if (null !== $origPage && $origPage > 0) {
+                $pageIdentifier = $origPage;
+            }
             if ($stagingLevel === self::LEVEL_LOCAL) {
                 $siteFinder = GeneralUtility::makeInstance(SiteFinder::class);
                 try {
@@ -133,16 +150,17 @@ class DomainService
                 }
             }
             if (isset($site)) {
-                $uri = (string)$site->getBase()->withScheme('');
+                $uri = $site->getLanguageById($sysLanguage)->getBase();
+                if (!$addProtocol) {
+                    $uri = $uri->withScheme('');
+                }
+                $uri = (string)$uri;
                 if ('/' === $uri && $stagingLevel === self::LEVEL_LOCAL) {
                     if ($addProtocol) {
                         $uri = GeneralUtility::getIndpEnv('TYPO3_REQUEST_HOST');
                     } else {
                         $uri = GeneralUtility::getIndpEnv('HTTP_HOST');
                     }
-                }
-                if (!$addProtocol) {
-                    $uri = ltrim($uri, '/');
                 }
                 return rtrim($uri, '/');
             }
@@ -155,6 +173,7 @@ class DomainService
      *
      * @param RecordInterface $record
      * @param string $stagingLevel
+     *
      * @return string|null
      */
     protected function getFirstDomainInRootLineFromRelatedRecords(RecordInterface $record, $stagingLevel)
@@ -180,6 +199,7 @@ class DomainService
      * @param string $stagingLevel
      *
      * @param bool $addProtocol
+     *
      * @return string
      *
      * @throws In2publishCoreException
